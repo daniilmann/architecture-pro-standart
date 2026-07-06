@@ -1,0 +1,37 @@
+@startuml
+!include <C4/C4_Container>
+
+' c4plantuml-state: target MVP
+' c4plantuml-scope: система работы с заявками MVP открытия депозитов и накопительных счетов онлайн
+' c4plantuml-evidence: F2-F4,F6-F10,F28,F31,R1-R5,P1,P3,S1-S4,+3,+4,+13,+14,+20,+21
+
+LAYOUT_LEFT_RIGHT()
+AddRelTag("async", $legendText="Асинхронное событие", $lineStyle=DashedLine())
+
+title Банк "Стандарт" - C4 Container: система работы с заявками
+
+System_Ext(digital_channels, "Цифровые каналы банка", "Сайт и интернет-банк через гейтвей")
+System_Ext(accounts, "Система счетов", "Read-only счета и клиентские признаки")
+System_Ext(rates, "Система управления ставками", "Расчет ставки по заявке")
+System_Ext(notifications, "Система оповещений", "СМС-коды и уведомления")
+System_Ext(call_center, "Система кол-центра", "Обработка заявок новых клиентов")
+System_Ext(abs, "АБС", "Учетное открытие депозита и накопительного счета")
+System_Ext(kafka, "Kafka", "События заявок и уведомлений")
+
+System_Boundary(deposit_applications, "Система работы с заявками") {
+  Container(application_service, "Сервис заявок", "ASP.NET Core/.NET", "Создает заявку, ведет жизненный цикл, инициирует подтверждение и передает параметры в учетный контур")
+  ContainerDb(application_db, "БД сервиса заявок", "MS SQL", "Заявки, статусы, audit context, подтверждения и идемпотентные ключи")
+}
+
+Rel_R(digital_channels, application_service, "Заявки, статусы и результат открытия", "HTTPS")
+Rel_D(application_service, application_db, "Заявки и статусы")
+Rel_R(application_service, accounts, "Проверка счета списания и признаков клиента", "HTTPS")
+Rel_R(application_service, rates, "Ставка по конкретной заявке", "HTTPS")
+Rel_R(application_service, notifications, "Создание СМС-challenge и уведомлений", "HTTPS / event")
+Rel_R(application_service, call_center, "Заявка нового клиента и результат звонка", "HTTPS / event")
+Rel_R(application_service, abs, "Передача подтвержденных параметров и получение результата", "Internal API")
+Rel_D(application_service, kafka, "События изменения статусов и уведомлений", "Kafka", $tags="async")
+
+SHOW_LEGEND()
+
+@enduml

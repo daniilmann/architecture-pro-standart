@@ -1,0 +1,93 @@
+@startuml
+!include <C4/C4_Container>
+
+' c4plantuml-state: target
+' c4plantuml-scope: контейнеры онлайн-заявки на кредит, Task 5
+' c4plantuml-evidence: T5-UC-01,T5-UC-02,T5-UC-03,T5-UC-04,T5-UC-05,T5-UC-06,T5-ASR-02,T5-ASR-03,T5-ASR-04,T5-ASR-06,T5-ASR-07,T5-ASR-08,T5-ASR-09
+
+LAYOUT_LEFT_RIGHT()
+AddRelTag("async", $legendText="Асинхронная интеграция / событие", $lineStyle=DashedLine())
+AddRelTag("batch", $legendText="Суточная пакетная передача из АБС", $lineStyle=DashedLine())
+AddRelTag("isolated", $legendText="Изолированный контур предодобрений", $lineStyle=BoldLine())
+
+title Банк "Стандарт" - C4 Container: онлайн-заявка на кредит
+
+Person(client, "Клиент", "Новый или действующий клиент банка")
+Person(front_office_manager, "Менеджер фронт-офиса", "Идентифицирует клиента в отделении")
+Person(credit_manager, "Менеджер кредитного бэк-офиса", "Работает с заявками в Кредитном конвейере")
+
+System_Ext(credit_bureau, "Бюро кредитных историй", "Внешний REST API")
+System_Ext(telecom_operator, "Телеком-оператор", "Доставка СМС")
+System_Ext(accounts_system, "Система счетов", "Read-only данные о счетах клиента и агрегированные признаки для предодобрений")
+System_Ext(abs_system, "АБС", "Учетная система банка. Используется фронт-офисом для продолжения кредитной заявки")
+
+System_Boundary(digital_channels, "Цифровые каналы банка") {
+  Container(site_ui, "Сайт банка", "PHP, React.js", "Показывает кредитные предложения и принимает заявку нового клиента")
+  Container(internet_bank_ui, "Интернет-банк", "ASP.NET MVC 4.5, .NET Framework", "Показывает кредиты, предодобрения и принимает заявку действующего клиента")
+  Container(digital_gateway, "Гейтвей цифровых каналов", "HTTP API", "Маршрутизирует запросы сайта и интернет-банка в кредитный онлайн-контур")
+}
+
+System_Boundary(application_system, "Система заявок") {
+  Container(application_service, "Сервис заявок", "ASP.NET Core/.NET или Java Spring Boot", "Создает кредитные заявки, ведет единый жизненный цикл, передает заявку в АБС и инициирует процесс в Кредитном конвейере")
+  ContainerDb(application_db, "БД системы заявок", "MS SQL / PostgreSQL", "Заявки, статусы, идентификаторы АБС и Кредитного конвейера, идемпотентные ключи")
+}
+
+System_Boundary(credit_conveyor_system, "Кредитный конвейер") {
+  Container(conveyor_ui, "Веб-интерфейс Кредитного конвейера", "Camunda UI / web UI", "Единое рабочее окно менеджера кредитного бэк-офиса")
+  Container(conveyor_engine, "BPM-движок", "Camunda, Java", "Ведет процесс рассмотрения кредитной заявки")
+  Container(conveyor_jobs, "Сервис обработчиков", "Java jobs / handlers", "Забирает онлайн-заявки из системы заявок, загружает суточный batch из АБС и исключает повторную обработку")
+  ContainerDb(conveyor_db, "БД Кредитного конвейера", "Oracle", "Штатные таблицы кредитных заявок, статусов и процесса рассмотрения")
+}
+
+System_Boundary(scoring_system, "Скоринг") {
+  Container(scoring_api, "Основной сервис кредитного скоринга", "Python, Flask REST API", "Рассчитывает скоринг по заявкам без массовых предрасчетов")
+  ContainerDb(scoring_db, "БД основного скоринга", "PostgreSQL", "Данные и результаты основного скоринга")
+  Container(preapproval_scoring_api, "Сервис скоринга предодобрений", "Python, Flask REST API", "Изолированно рассчитывает предодобренные предложения")
+  ContainerDb(preapproval_scoring_db, "БД скоринга предодобрений", "PostgreSQL", "Изолированные данные и результаты предодобренных предложений")
+}
+
+System_Boundary(notifications_system, "Система оповещений") {
+  Container(notification_service, "Сервис оповещений", "ASP.NET Core/.NET или Java Spring Boot", "Формирует СМС-коды и уведомления по статусам заявок")
+  ContainerDb(notification_db, "БД сервиса оповещений", "MS SQL / PostgreSQL", "Шаблоны, журналы отправок, статусы доставки и идемпотентные ключи")
+}
+
+Rel(client, site_ui, "Подает заявку на сайте")
+Rel(client, internet_bank_ui, "Подает заявку в интернет-банке")
+Rel(front_office_manager, abs_system, "Идентифицирует клиента и продолжает заявку")
+Rel(credit_manager, conveyor_ui, "Рассматривает заявки")
+
+Rel(site_ui, digital_gateway, "Заявка и запрос статуса", "HTTPS")
+Rel(internet_bank_ui, digital_gateway, "Заявка, СМС-подтверждение и запрос статуса", "HTTPS")
+Rel(digital_gateway, application_service, "Создает заявку, получает статус и предодобренные предложения", "HTTPS")
+Rel(digital_gateway, conveyor_engine, "Получает актуальные условия кредитных продуктов для сайта и интернет-банка", "HTTPS")
+
+Rel(application_service, application_db, "Сохраняет заявку, статусы и ключи идемпотентности")
+Rel(application_service, abs_system, "Передает заявку и статус для продолжения в отделении", "Internal API")
+Rel(application_service, digital_gateway, "Отправляет событие о предодобренной заявке", "Event", $tags="async")
+Rel(digital_gateway, internet_bank_ui, "Загружает предодобренное предложение в интернет-банк", "Internal API", $tags="async")
+
+Rel(application_service, conveyor_engine, "Инициирует запуск процесса по кредитной заявке", "API / message start event", $tags="async")
+Rel(conveyor_engine, conveyor_jobs, "Выполняет обработку онлайн-заявок и суточной загрузки")
+Rel(conveyor_jobs, application_service, "Забирает детали онлайн-заявки", "HTTPS")
+Rel(conveyor_jobs, conveyor_db, "Создает заявку в штатной модели данных конвейера")
+Rel(conveyor_ui, conveyor_engine, "Открывает и ведет процесс заявки")
+Rel(conveyor_engine, conveyor_db, "Читает и обновляет процесс и статусы")
+
+Rel(abs_system, conveyor_jobs, "Передает заявки раз в сутки", "Batch", $tags="batch")
+Rel(conveyor_jobs, conveyor_db, "Создает только отсутствующие заявки и пропускает уже обработанные", $tags="batch")
+
+Rel(conveyor_engine, scoring_api, "Запрашивает скоринг по заявке", "REST")
+Rel(scoring_api, scoring_db, "Читает и сохраняет результаты")
+Rel(scoring_api, credit_bureau, "Получает данные БКИ для новых клиентов", "REST")
+Rel(preapproval_scoring_api, credit_bureau, "Получает данные для предодобрений", "REST", $tags="isolated")
+Rel(preapproval_scoring_api, accounts_system, "Получает данные о счетах и признаки клиента для предодобрений", "HTTPS", $tags="isolated")
+Rel(preapproval_scoring_api, preapproval_scoring_db, "Сохраняет изолированные результаты предодобрений", $tags="isolated")
+Rel(preapproval_scoring_api, application_service, "Публикует признак и параметры предодобренного предложения", "API / events", $tags="isolated")
+
+Rel(application_service, notification_service, "Запрашивает СМС-код и уведомления о статусе", "Events")
+Rel(notification_service, notification_db, "Фиксирует отправки и результаты доставки")
+Rel(notification_service, telecom_operator, "Отправляет СМС", "SMS gateway")
+
+SHOW_LEGEND()
+
+@enduml

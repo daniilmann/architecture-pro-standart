@@ -1,0 +1,41 @@
+@startuml
+!include <C4/C4_Context>
+
+' c4plantuml-state: target MVP
+' c4plantuml-scope: передача общих и персонализированных депозитных ставок в кол-центры, Task 4
+' c4plantuml-evidence: T4-UC-01,T4-UC-02,T4-UC-03,T4-F1-T4-F6,T4-R1-T4-R5
+
+LAYOUT_WITH_LEGEND()
+AddRelTag("file_email", $legendText="Файловая передача по email", $lineStyle=DashedLine())
+
+title Банк "Стандарт" - C4 Context: ставки для кол-центров
+
+Person(call_center_operator, "Оператор кол-центра банка", "Консультирует клиентов по депозитным продуктам и ставкам")
+Person(partner_operator, "Оператор партнерского кол-центра", "Консультирует клиентов по готовым скриптам и полученному файлу ставок")
+Person(backoffice_deposit_manager, "Менеджер бэк-офиса депозитов", "Ведет и публикует актуальные депозитные ставки")
+
+Enterprise_Boundary(bank, "Банк Стандарт") {
+  System(call_center, "Система кол-центра банка", "React.js, Java Spring Boot, PostgreSQL. Рабочее место оператора банка")
+  System(digital_channels, "Цифровые каналы банка", "Гейтвей и кеш цифровых каналов. Уже отдают общие ставки сайту и предоставляют внутренний API персонализированных ставок для кол-центра")
+  System(rates, "Система управления ставками", "ASP.NET Core/.NET, MS SQL. Хранит версии общих, персонализированных и специальных ставок")
+  System(notifications, "Система оповещений", "Сервис отправки СМС и email-уведомлений. Отвечает за техническую доставку файла партнеру")
+}
+
+System_Ext(partner_call_center, "Система партнерского кол-центра", "Внешняя система партнера. API-интеграция и SFTP недоступны, принимает файл со ставками")
+
+Rel(call_center_operator, call_center, "Открывает карточку клиента и запрашивает актуальные ставки")
+Rel(call_center, digital_channels, "Веб-интерфейс напрямую запрашивает общие и персонализированные ставки", "HTTPS")
+Rel(digital_channels, rates, "Получает готовые персонализированные ставки и обновления кеша", "HTTPS / cache integration")
+Rel(backoffice_deposit_manager, rates, "Загружает, проверяет и публикует версии ставок")
+
+Rel(rates, notifications, "Передает файл ставок и версию для email-отправки партнеру", "REST", $tags="file_email")
+Rel(notifications, partner_call_center, "Отправляет email с файлом ставок", "Email", $tags="file_email")
+Rel(partner_operator, partner_call_center, "Использует файл ставок в сценарии консультации")
+
+Lay_R(call_center, digital_channels)
+Lay_R(digital_channels, rates)
+Lay_D(rates, notifications)
+
+SHOW_LEGEND()
+
+@enduml

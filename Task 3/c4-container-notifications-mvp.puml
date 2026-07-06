@@ -1,0 +1,38 @@
+@startuml
+!include <C4/C4_Container>
+
+' c4plantuml-state: target MVP
+' c4plantuml-scope: система оповещений MVP открытия депозитов и накопительных счетов онлайн
+' c4plantuml-evidence: F8,F10,R1,R4-R5,P1,S1-S4,+3,+8,+10,+11,+18
+
+LAYOUT_LEFT_RIGHT()
+AddRelTag("async", $legendText="Асинхронное событие", $lineStyle=DashedLine())
+
+title Банк "Стандарт" - C4 Container: система оповещений
+
+Person(new_client, "Новый клиент", "Получает уведомления о статусе заявки")
+Person(existing_client, "Действующий клиент", "Получает СМС-код и уведомления")
+
+System_Ext(applications, "Система работы с заявками", "Инициирует подтверждение и уведомления")
+System_Ext(digital_channels, "Цифровые каналы банка", "Передают введенный клиентом код на проверку")
+System_Ext(kafka, "Kafka", "События уведомлений и статусов")
+System_Ext(telecom, "Телеком-оператор", "Внешний провайдер доставки СМС")
+
+System_Boundary(notification_system, "Система оповещений") {
+  Container(notification_service, "Сервис оповещений", "ASP.NET Core/.NET", "Формирует СМС-challenge, уведомления, TTL, повторы и статусы доставки")
+  Container(sms_gateway, "СМС-шлюз банка", "Bank SMS gateway", "Отправляет сообщения телеком-оператору")
+  ContainerDb(notification_db, "БД сервиса оповещений", "MS SQL", "Шаблоны, параметры отправки, журнал отправок и статусы доставки")
+}
+
+Rel_R(applications, notification_service, "Создание СМС-challenge и уведомлений", "HTTPS / event")
+Rel_R(digital_channels, notification_service, "Проверка введенного клиентом кода", "Internal API")
+Rel_R(kafka, notification_service, "События статусов заявок", "Kafka", $tags="async")
+Rel_D(notification_service, notification_db, "Шаблоны, попытки и журнал отправок")
+Rel_R(notification_service, sms_gateway, "СМС", "Internal API")
+Rel_R(sms_gateway, telecom, "СМС", "HTTPS/SMPP")
+Rel_D(telecom, existing_client, "СМС-код и уведомления")
+Rel_D(telecom, new_client, "Уведомления")
+
+SHOW_LEGEND()
+
+@enduml

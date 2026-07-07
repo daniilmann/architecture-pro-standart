@@ -1,0 +1,63 @@
+@startuml
+!include <C4/C4_Context>
+
+' c4plantuml-state: target
+' c4plantuml-scope: онлайн-заявка на кредит через сайт и интернет-банк, Task 5
+' c4plantuml-evidence: T5-UC-01,T5-UC-02,T5-UC-03,T5-UC-04,T5-UC-05,T5-UC-06,T5-ASR-02,T5-ASR-03,T5-ASR-04,T5-ASR-08
+
+LAYOUT_WITH_LEGEND()
+AddRelTag("async", $legendText="Асинхронная интеграция / событие", $lineStyle=DashedLine())
+AddRelTag("batch", $legendText="Суточная пакетная передача из АБС", $lineStyle=DashedLine())
+AddRelTag("isolated", $legendText="Изолированный контур без нагрузки на основной скоринг", $lineStyle=BoldLine())
+
+title Банк "Стандарт" - C4 Context: онлайн-заявка на кредит
+
+Person(new_client, "Новый клиент", "Подает кредитную заявку на сайте и проходит идентификацию в отделении")
+Person(existing_client, "Действующий клиент", "Подает кредитную заявку в интернет-банке")
+Person(front_office_manager, "Менеджер фронт-офиса", "Идентифицирует клиента и продолжает работу с заявкой в отделении")
+Person(credit_manager, "Менеджер кредитного бэк-офиса", "Рассматривает кредитные заявки в Кредитном конвейере")
+
+Enterprise_Boundary(bank, "Банк Стандарт") {
+  System(digital_channels, "Цифровые каналы банка", "Сайт, интернет-банк и гейтвей цифровых каналов. Показывают кредитные условия, предодобренные предложения и принимают заявки")
+  System(application_system, "Система заявок", "Единый владелец жизненного цикла онлайн-заявок и статусов")
+  System(abs, "АБС", "Delphi, Oracle, PL/SQL. Учетная система банка и рабочий контур фронт-офиса")
+  System(accounts_system, "Система счетов", "Read-only данные о счетах клиента и агрегированные признаки для предодобрений")
+  System(credit_conveyor, "Кредитный конвейер", "Camunda, Oracle, Java-обработчики. Рабочее место обработки кредитных заявок")
+  System(scoring, "Система кредитного скоринга", "Python, Flask, PostgreSQL. Основной скоринг по заявкам и изолированный контур расчета предодобренных предложений")
+  System(notifications, "Система оповещений", "Отправка СМС-кодов и уведомлений о статусе заявки")
+}
+
+System_Ext(credit_bureau, "Бюро кредитных историй", "Внешний REST API с данными кредитной истории новых клиентов")
+System_Ext(telecom_operator, "Телеком-оператор", "Доставка СМС клиентам")
+
+Rel(new_client, digital_channels, "Просматривает кредитные предложения на сайте и подает заявку")
+Rel(existing_client, digital_channels, "Просматривает кредиты и предодобренные предложения в интернет-банке, подает заявку")
+Rel(front_office_manager, abs, "Идентифицирует клиента и продолжает заявку в отделении")
+Rel(credit_manager, credit_conveyor, "Работает с заявками в одном штатном интерфейсе")
+
+Rel(digital_channels, application_system, "Создает заявку, подтверждает СМС-кодом и запрашивает статус", "HTTPS")
+Rel(application_system, digital_channels, "Отправляет событие о предодобренной заявке для загрузки в интернет-банк", "Event", $tags="async")
+
+Rel(application_system, abs, "Передает заявку и статус в АБС для продолжения в отделении", "Internal API")
+Rel(application_system, credit_conveyor, "Инициирует процесс по кредитной заявке", "API / message start event", $tags="async")
+Rel(abs, credit_conveyor, "Передает заявки раз в сутки; дубли онлайн-заявок отфильтровываются", "Batch", $tags="batch")
+Rel(credit_conveyor, application_system, "Забирает детали заявки и возвращает изменения статуса", "HTTPS / events")
+Rel(digital_channels, credit_conveyor, "Получает актуальные условия кредитных продуктов для сайта и интернет-банка", "HTTPS")
+
+Rel(credit_conveyor, scoring, "Запрашивает скоринг по заявке", "REST")
+Rel(scoring, credit_bureau, "Получает данные БКИ для новых клиентов", "REST")
+Rel(scoring, credit_bureau, "Получает данные для предодобренных предложений в изолированном контуре", "REST", $tags="isolated")
+Rel(scoring, accounts_system, "Получает данные о счетах и признаки клиента для предодобрений", "HTTPS", $tags="isolated")
+Rel(scoring, application_system, "Передает признаки и результаты предодобренных предложений", "API / events", $tags="isolated")
+
+Rel(application_system, notifications, "Инициирует СМС-коды и уведомления о статусах", "Events")
+Rel(notifications, telecom_operator, "Отправляет СМС", "SMS gateway")
+
+Lay_R(digital_channels, application_system)
+Lay_R(application_system, abs)
+Lay_D(application_system, credit_conveyor)
+Lay_R(credit_conveyor, scoring)
+
+SHOW_LEGEND()
+
+@enduml

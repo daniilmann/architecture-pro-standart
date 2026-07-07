@@ -1,0 +1,54 @@
+@startuml
+!include <C4/C4_Container>
+
+' c4plantuml-state: target MVP
+' c4plantuml-scope: контейнеры для передачи общих и персонализированных депозитных ставок в кол-центры, Task 4
+' c4plantuml-evidence: T4-UC-01,T4-UC-02,T4-UC-03,T4-F1-T4-F6,T4-R1-T4-R5
+
+LAYOUT_LEFT_RIGHT()
+AddRelTag("async", $legendText="Асинхронное обновление кеша", $lineStyle=DashedLine())
+AddRelTag("file_email", $legendText="Файловая передача по email", $lineStyle=DashedLine())
+
+title Банк "Стандарт" - C4 Container: ставки для кол-центров
+
+Person(call_center_operator, "Оператор кол-центра банка", "Консультирует клиента по телефону")
+System_Ext(partner_call_center, "Система партнерского кол-центра", "Внешняя система партнера, принимает файл со ставками")
+System_Ext(mail, "Корпоративная почта банка", "SMTP/email-инфраструктура")
+System_Ext(kafka, "Kafka", "События обновления ставок")
+
+System_Boundary(call_center_system, "Система кол-центра банка") {
+  Container(call_center_ui, "Веб-интерфейс кол-центра", "React.js", "Показывает оператору общие и персонализированные ставки в карточке клиента")
+}
+
+System_Boundary(digital_channels, "Цифровые каналы банка") {
+  Container(digital_gateway, "Гейтвей цифровых каналов", "ASP.NET Core/.NET HTTP API", "Единая точка входа для запросов ставок из кол-центра")
+  ContainerDb(digital_cache, "Кеш цифровых каналов", "MS SQL / cache table", "Опубликованные общие ставки и справочные данные")
+}
+
+System_Boundary(rates_system, "Система управления ставками") {
+  Container(rates_service, "Сервис ставок", "ASP.NET Core/.NET", "Управляет готовыми общими и персонализированными ставками и формирует файл для партнера")
+  ContainerDb(rates_db, "БД сервиса ставок", "MS SQL", "Версии ставок, история изменений и правила персонализации")
+}
+
+System_Boundary(notifications_system, "Система оповещений") {
+  Container(notification_service, "Сервис оповещений", "ASP.NET Core/.NET", "Принимает запрос на отправку файла и выполняет email-доставку через корпоративную почту")
+  ContainerDb(notification_db, "БД сервиса оповещений", "MS SQL", "Шаблоны, параметры отправки, журнал email-отправок и статусы доставки")
+}
+
+Rel(call_center_operator, call_center_ui, "Запрашивает консультационные ставки")
+Rel_R(call_center_ui, digital_gateway, "Прямой запрос общих и персонализированных ставок", "HTTPS")
+
+Rel_D(digital_gateway, digital_cache, "Читает опубликованные общие ставки")
+Rel_R(digital_gateway, rates_service, "Запрашивает готовые персонализированные ставки для кол-центра", "HTTPS")
+Rel_U(kafka, digital_gateway, "События обновления общих ставок для кеша", "Kafka", $tags="async")
+
+Rel_D(rates_service, rates_db, "Ставки, версии, правила и настройки отправки")
+Rel_R(rates_service, kafka, "Публикует событие обновления общих ставок", "Kafka", $tags="async")
+Rel_R(rates_service, notification_service, "Передает файл ставок и версию", "REST", $tags="file_email")
+Rel_D(notification_service, notification_db, "Фиксирует запрос, статус отправки и ошибку доставки")
+Rel_R(notification_service, mail, "Отправляет email с файлом ставок", "SMTP", $tags="file_email")
+Rel_R(mail, partner_call_center, "Доставляет файл партнерскому кол-центру", "Email", $tags="file_email")
+
+SHOW_LEGEND()
+
+@enduml

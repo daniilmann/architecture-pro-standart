@@ -1,0 +1,33 @@
+@startuml
+!include <C4/C4_Container>
+
+' c4plantuml-state: target MVP
+' c4plantuml-scope: интеграция с АБС в MVP открытия депозитов и накопительных счетов онлайн
+' c4plantuml-evidence: F4,F7,F9,F28,F31,R1-R5,P1,P3,S1-S4,+13,+14,+20,+21
+
+LAYOUT_LEFT_RIGHT()
+
+title Банк "Стандарт" - C4 Container: интеграция с АБС
+
+Person(backoffice_deposit_manager, "Менеджер бэк-офиса депозитов", "Подтверждает условия заявки")
+Person(frontoffice_manager, "Менеджер фронт-офиса", "Идентифицирует нового клиента")
+
+System_Ext(applications, "Система работы с заявками", "Передает подтвержденные параметры и получает учетный результат")
+System_Ext(accounts, "Система счетов", "Получает read-only изменения через CDC")
+
+System_Boundary(abs_system, "АБС") {
+  Container(abs_desktop, "Десктопный клиент АБС", "Delphi", "Рабочее место фронт- и бэк-офиса")
+  Container(abs_api_adapter, "Интеграционный адаптер АБС", "PL/SQL / internal API", "Контролируемый вход в учетный контур")
+  Container(abs_core, "Ядро АБС", "PL/SQL procedures", "Учетная логика депозитов и накопительных счетов")
+  ContainerDb(abs_db, "БД АБС", "Oracle", "Клиенты, счета, договоры и проводки")
+}
+
+Rel(backoffice_deposit_manager, abs_desktop, "Подтверждает условия депозита")
+Rel(frontoffice_manager, abs_desktop, "Идентификация нового клиента")
+Rel_R(applications, abs_api_adapter, "Открытие / результат", "Internal API")
+Rel_D(abs_api_adapter, abs_core, "Учетные операции")
+Rel_D(abs_desktop, abs_core, "Старый ручной процесс")
+Rel_D(abs_core, abs_db, "Учетные данные")
+Rel_R(abs_db, accounts, "Изменения клиентов, счетов и договоров", "CDC")
+
+@enduml

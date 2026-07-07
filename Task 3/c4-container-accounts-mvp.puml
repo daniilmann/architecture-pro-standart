@@ -1,0 +1,30 @@
+@startuml
+!include <C4/C4_Container>
+
+' c4plantuml-state: target MVP
+' c4plantuml-scope: система счетов MVP открытия депозитов и накопительных счетов онлайн
+' c4plantuml-evidence: F5-F7,F10-F11,F30,R1-R5,P2-P3,S1-S4,+13,+14,+20,+21
+
+LAYOUT_LEFT_RIGHT()
+
+title Банк "Стандарт" - C4 Container: система счетов
+
+System_Ext(digital_channels, "Цифровые каналы банка", "Запрашивают счета списания и признаки клиента")
+System_Ext(applications, "Система работы с заявками", "Проверяет выбранный счет")
+System_Ext(rates, "Система управления ставками", "Использует признаки для специальных ставок")
+System_Ext(abs, "АБС", "System of record для клиентов, счетов, договоров и проводок")
+
+System_Boundary(accounts_system, "Система счетов") {
+  Container(accounts_service, "Сервис счетов", "ASP.NET Core/.NET", "Отдает read-only клиентские данные, счета, статусы и признаки для ставок")
+  Container(abs_cdc_adapter, "CDC-адаптер АБС", "Oracle LogMiner / GoldenGate adapter", "Читает изменения из журналов Oracle АБС")
+  ContainerDb(accounts_db, "БД сервиса счетов", "MS SQL", "Проекция клиентов, счетов, статусов и признаков крупных остатков")
+}
+
+Rel_R(digital_channels, accounts_service, "Счета списания и клиентские признаки", "HTTPS")
+Rel_R(applications, accounts_service, "Проверка счета и признаков клиента", "HTTPS")
+Rel_R(rates, accounts_service, "Агрегированные признаки для специальных ставок", "HTTPS")
+Rel_R(abs_cdc_adapter, abs, "Читает redo/archive logs", "CDC")
+Rel_D(abs_cdc_adapter, accounts_db, "Актуализирует read-модель")
+Rel_D(accounts_service, accounts_db, "Клиенты, счета, статусы и признаки")
+
+@enduml

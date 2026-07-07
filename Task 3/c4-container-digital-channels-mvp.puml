@@ -1,0 +1,46 @@
+@startuml
+!include <C4/C4_Container>
+
+' c4plantuml-state: target MVP
+' c4plantuml-scope: цифровые каналы MVP открытия депозитов и накопительных счетов онлайн
+' c4plantuml-evidence: F1-F2,F5-F8,F28-F31,R1-R5,P1-P3,S1-S4,+1-+4,+8,+11-+14,+17-+19
+
+LAYOUT_LEFT_RIGHT()
+AddRelTag("async", $legendText="Асинхронное событие", $lineStyle=DashedLine())
+
+title Банк "Стандарт" - C4 Container: цифровые каналы MVP
+
+Person(new_client, "Новый клиент", "Подает заявку на депозит на сайте")
+Person(existing_client, "Действующий клиент", "Открывает депозит или накопительный счет в интернет-банке")
+
+System_Ext(applications, "Система работы с заявками", "Создает заявки, ведет статусы и подтверждения")
+System_Ext(accounts, "Система счетов", "Read-only счета списания и клиентские признаки")
+System_Ext(rates, "Система управления ставками", "Актуальные, персональные и специальные ставки")
+System_Ext(kafka, "Kafka", "События обновления ставок и статусов")
+
+System_Boundary(digital_channels, "Цифровые каналы банка") {
+  Container(public_site, "Сайт банка", "PHP, React.js", "Показывает публичные ставки и принимает заявки новых клиентов")
+  Container(internet_bank, "Интернет-банк", "ASP.NET MVC 4.5, .NET Framework 4.5", "Авторизованное открытие депозитов и накопительных счетов")
+  Container(digital_gateway, "Гейтвей цифровых каналов", "ASP.NET Core/.NET HTTP API", "Единая точка входа из каналов в новые сервисы MVP")
+  ContainerDb(digital_cache, "Кеш цифровых каналов", "MS SQL / cache table", "Опубликованные общие ставки и справочные данные")
+  ContainerDb(digital_audit_db, "БД аудита цифровых каналов", "MS SQL / audit table", "IP, браузер, источник обращения и audit context")
+  ContainerDb(internet_bank_db, "БД интернет-банка", "MS SQL", "Профиль интернет-банка и данные сессий")
+}
+
+Rel(new_client, public_site, "Смотрит ставки и оставляет Ф. И. О. и телефон", "HTTPS")
+Rel(existing_client, internet_bank, "Выбирает продукт, счет списания и сумму", "HTTPS")
+
+Rel_R(public_site, digital_gateway, "Заявки и публичные ставки", "HTTPS")
+Rel_R(internet_bank, digital_gateway, "Заявки, счета, статусы", "HTTPS")
+Rel_D(internet_bank, internet_bank_db, "Сессии и профиль ИБ")
+Rel_D(digital_gateway, digital_cache, "Читает опубликованные ставки")
+Rel_D(digital_gateway, digital_audit_db, "Сохраняет audit context")
+
+Rel_R(digital_gateway, applications, "Создание заявок и получение статусов", "HTTPS")
+Rel_R(digital_gateway, accounts, "Счета списания и признаки клиента", "HTTPS")
+Rel_R(digital_gateway, rates, "Общие ставки и справочники", "HTTPS")
+Rel_U(kafka, digital_gateway, "Обновления кеша ставок и статусов", "Kafka", $tags="async")
+
+SHOW_LEGEND()
+
+@enduml

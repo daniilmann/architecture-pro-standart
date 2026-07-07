@@ -1,0 +1,63 @@
+@startuml
+!include <C4/C4_Context>
+
+' c4plantuml-state: target MVP
+' c4plantuml-scope: открытие депозитов и накопительных счетов онлайн, Task 3
+' c4plantuml-evidence: F1-F11,F28-F30,R1-R3,P1-P3,S1-S4,+1-+4,+6-+14,+17-+28,+30-+31
+
+LAYOUT_WITH_LEGEND()
+AddRelTag("target_1y", $legendText="Целевой процесс / 1 год", $lineStyle=DashedLine())
+
+title Банк "Стандарт" - C4 Context: MVP открытия депозитов онлайн
+
+Person(new_client, "Новый клиент", "Потенциальный клиент без действующего договора с банком")
+Person(existing_client, "Действующий клиент", "Клиент, уже прошедший идентификацию и работающий в интернет-банке")
+Person(call_center_operator, "Оператор кол-центра", "Связывается с новым клиентом после заявки с сайта")
+Person(backoffice_deposit_manager, "Менеджер бэк-офиса депозитов", "Проверяет заявку и подтверждает условия депозита в MVP")
+Person(frontoffice_manager, "Менеджер фронт-офиса", "Идентифицирует нового клиента в отделении и выполняет офлайн-часть процесса")
+
+Enterprise_Boundary(bank, "Банк Стандарт") {
+  System(digital_channels, "Цифровые каналы банка", "ASP.NET MVC 4.5, .NET Framework 4.5, MS SQL. Публичная и авторизованная часть клиентского цифрового канала; принимает заявки и показывает ставки")
+  System(applications, "Система работы с заявками", "ASP.NET Core/.NET, MS SQL. В MVP используется для депозитов и накопительных счетов; далее по Strangler Fig может забирать заявочный функционал из АБС")
+  System(rates, "Система управления ставками", "ASP.NET Core/.NET, MS SQL. Хранит актуальные, персональные и специальные ставки; заменяет ручной обмен XLS как источник для онлайн-каналов")
+  System(accounts, "Система счетов", "ASP.NET Core/.NET, MS SQL, CDC из Oracle АБС. Read-only данные счетов, клиентские признаки и признаки крупных остатков")
+  System(call_center, "Система кол-центра", "React.js, Java Spring Boot, PostgreSQL. Получает заявки с сайта и предоставляет их оператору для звонка клиенту")
+  System(abs, "АБС", "Delphi client, Oracle, PL/SQL. Система учета заявок, подтверждения условий и учетного открытия депозитов в MVP")
+  System(notifications, "Система оповещений", "ASP.NET Core/.NET, MS SQL, адаптер к СМС-шлюзу. Отправляет СМС-коды и уведомления, изолируя СМС-функционал от ядра АБС")
+}
+
+System_Ext(telecom, "Телеком-оператор", "Внешний провайдер доставки СМС")
+
+Rel(new_client, digital_channels, "Смотрит публичные ставки и оставляет Ф. И. О. и телефон")
+Rel(digital_channels, applications, "Передает заявки клиентов и получает статусы", "HTTPS")
+Rel(applications, call_center, "Передает заявку нового клиента для обработки оператором")
+Rel(call_center_operator, call_center, "Изучает заявку и связывается с клиентом")
+Rel(call_center, applications, "Фиксирует результат обработки заявки, предложенные условия и статус")
+Rel(new_client, frontoffice_manager, "Проходит личную идентификацию в отделении после заявки")
+
+Rel(existing_client, digital_channels, "После авторизации выбирает депозит или накопительный счет, указывает счет и сумму")
+Rel(applications, notifications, "Запрашивает подтверждение СМС-кодом и отправку уведомлений")
+Rel(notifications, telecom, "Передает СМС для доставки клиенту")
+Rel(telecom, existing_client, "Доставляет СМС-код и уведомления")
+Rel(telecom, new_client, "Доставляет уведомления о статусе и необходимости визита")
+
+Rel(backoffice_deposit_manager, rates, "Ведет и проверяет депозитные ставки с разграничением доступа")
+Rel(rates, digital_channels, "Предоставляет только общие ставки, не привязанные к конкретной заявке")
+Rel(rates, applications, "Предоставляет ставки для расчета условий по заявке")
+Rel(digital_channels, accounts, "Запрашивает доступные счета списания и признаки клиента", "HTTPS")
+Rel(applications, accounts, "Проверяет счет списания и клиентские признаки", "HTTPS")
+Rel(rates, accounts, "Получает агрегированные признаки для специальных ставок", "HTTPS")
+Rel(applications, digital_channels, "Возвращает условия по заявке, статусы и результат открытия депозита")
+Rel(applications, abs, "Передает подтвержденные параметры для учетного открытия депозита без прямой нагрузки цифровых каналов на БД АБС")
+Rel(backoffice_deposit_manager, abs, "Подтверждает условия депозита по заявке в MVP")
+Rel(frontoffice_manager, abs, "Выполняет учетные действия и загружает подписанные документы для новых клиентов")
+Rel(frontoffice_manager, applications, "Идентификация и продолжение заявки", "Целевой процесс / 1 год", $tags="target_1y")
+Rel(abs, applications, "Возвращает результат учетного открытия депозита")
+Rel(abs, accounts, "Передает изменения клиентов, счетов и договоров в read-модель", "CDC")
+
+Lay_R(digital_channels, applications)
+Lay_R(applications, abs)
+Lay_D(accounts, rates)
+Lay_D(applications, notifications)
+
+@enduml

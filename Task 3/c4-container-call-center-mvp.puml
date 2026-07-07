@@ -1,0 +1,27 @@
+@startuml
+!include <C4/C4_Container>
+
+' c4plantuml-state: target MVP
+' c4plantuml-scope: система кол-центра в MVP открытия депозитов онлайн
+' c4plantuml-evidence: F3,F31,R1,R4-R5,P1,S1-S4
+
+LAYOUT_LEFT_RIGHT()
+
+title Банк "Стандарт" - C4 Container: система кол-центра
+
+Person(call_center_operator, "Оператор кол-центра", "Связывается с новым клиентом по заявке с сайта")
+
+System_Ext(applications, "Система работы с заявками", "Передает заявку нового клиента и принимает результат звонка")
+
+System_Boundary(call_center, "Система кол-центра") {
+  Container(call_center_ui, "Веб-интерфейс кол-центра", "React.js", "Рабочее место оператора")
+  Container(call_center_backend, "Бэкенд кол-центра", "Java Spring Boot", "Принимает заявки и фиксирует результаты обработки")
+  ContainerDb(call_center_db, "БД кол-центра", "PostgreSQL", "Обращения и результаты звонков")
+}
+
+Rel(call_center_operator, call_center_ui, "Открывает карточку заявки и фиксирует результат")
+Rel_D(call_center_ui, call_center_backend, "Работа с заявкой", "HTTPS")
+Rel_D(call_center_backend, call_center_db, "Обращения и результаты звонков")
+Rel_R(applications, call_center_backend, "Заявка / результат обработки", "HTTPS / event")
+
+@enduml
